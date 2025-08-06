@@ -1,0 +1,32 @@
+<?php
+
+use App\Http\Controllers\UserController;
+use Illuminate\Support\Facades\Route;
+
+Route::middleware('jwt.auth')->group(function(){
+    Route::prefix('v1/users')->group(function(){
+        Route::post("/register-admin", [UserController::class, 'registerAdmin']);
+        Route::post("/register-editor", [UserController::class, 'registerEditor']);
+        Route::post("/register", [UserController::class, 'register']);
+        Route::post("/login-admin-editor", [UserController::class, 'loginAdminEditor']);
+        Route::post("/login", [UserController::class, 'login']);
+        Route::post("/otp", [UserController::class, 'sendOtp']);
+        Route::post("/check-otp", [UserController::class, 'checkOtp']);
+
+        Route::get("/admin-exists", [UserController::class, 'checkAdminUsersExist']);
+
+        Route::put("/check-login", [UserController::class, 'checkLogin']);
+        Route::put("/password", [UserController::class, 'updatePw']);
+
+        Route::delete("/logout", [UserController::class, 'logout']);
+    });
+});
+
+Route::middleware('token')->group(function(){
+    Route::prefix('v1/users')->group(function(){
+        Route::get("/", [UserController::class, 'getUsers']);
+        Route::get("/search", [UserController::class, 'searchUsers']);
+
+        Route::delete("/{id}", [UserController::class, 'deleteUser']);
+    });
+});
