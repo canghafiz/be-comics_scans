@@ -1,7 +1,7 @@
 <?php
 
 use App\Http\Middleware\CheckAdminExists;
-use App\Http\Middleware\CheckJwtAuthorization;
+use App\Http\Middleware\CheckApiKey;
 use App\Http\Middleware\TackleAdminExists;
 use App\Http\Middleware\TokenMiddleware;
 use Illuminate\Foundation\Application;
@@ -17,7 +17,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
-            'jwt.auth' => CheckJwtAuthorization::class,
+            'api_key' => CheckApiKey::class,
             'token' => TokenMiddleware::class,
             'admin_exists' => CheckAdminExists::class,
             'tackle_admin_exists' => TackleAdminExists::class,

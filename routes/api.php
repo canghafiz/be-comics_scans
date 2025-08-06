@@ -3,7 +3,7 @@
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware('jwt.auth')->group(function(){
+Route::middleware('api_key')->group(function(){
     Route::prefix('v1/users')->group(function(){
         Route::post("/register-admin", [UserController::class, 'registerAdmin']);
         Route::post("/register-editor", [UserController::class, 'registerEditor']);
