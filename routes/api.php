@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\MangaController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -19,6 +20,11 @@ Route::middleware('api_key')->group(function(){
         Route::put("/password", [UserController::class, 'updatePw']);
 
         Route::delete("/logout", [UserController::class, 'logout']);
+    });
+
+    Route::prefix('v1/manga')->group(function(){
+        Route::get("/latest", [MangaController::class, 'latest']);
+        Route::get("/projectAll", [MangaController::class, 'projectAll']);
     });
 });
 
