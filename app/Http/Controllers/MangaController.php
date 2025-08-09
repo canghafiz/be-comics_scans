@@ -2,8 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Resources\HeroSliderCollection;
 use App\Http\Resources\LatestCollection;
+use App\Http\Resources\PopularTodayCollection;
 use App\Http\Resources\ProjectAllCollection;
+use App\Http\Resources\RecommendationCollection;
+use App\Http\Resources\SearchResourceCollection;
+use App\Http\Resources\SeriesDetailResource;
 use App\Services\MangaService;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
@@ -17,6 +22,15 @@ class MangaController extends Controller
         $this->mangaService = $service;
     }
 
+    public function popularToday(Request $request) :void {
+        $clearCache = $request->input('clear-cache', false);
+
+        $projects = $this->mangaService->popularToday($clearCache);
+        throw new HttpResponseException(response([
+            "success" => true,
+            "data" => new PopularTodayCollection($projects)
+        ], 200));
+    }
     public function latest(Request $request) :void {
         $limit = $request->input('limit', 20);
         $clearCache = $request->input('clear-cache', false);
@@ -27,7 +41,6 @@ class MangaController extends Controller
             "data" => new LatestCollection($projects)
         ], 200));
     }
-
     public function projectAll(Request $request) :void {
         $limit = $request->input('limit', 20);
         $clearCache = $request->input('clear-cache', false);
@@ -36,6 +49,62 @@ class MangaController extends Controller
         throw new HttpResponseException(response([
             "success" => true,
             "data" => new ProjectAllCollection($projects)
+        ], 200));
+    }
+    public function searchManga(Request $request) :void {
+        $title = $request->input('title');
+        $genres = $request->input('genres');
+        $clearCache = $request->boolean('clear-cache');
+
+        if (is_string($genres)) {
+            $genres = explode(',', $genres);
+        }
+        if (empty($genres)) {
+            $genres = null;
+        }
+
+        $projects = $this->mangaService->search($title, $genres, $clearCache);
+        throw new HttpResponseException(response([
+            "success" => true,
+            "data" => new SearchResourceCollection($projects)
+        ], 200));
+    }
+    public function recommendation(Request $request) :void {
+        $limit = $request->input('limit', 20);
+
+        $projects = $this->mangaService->recommendation($limit);
+        throw new HttpResponseException(response([
+            "success" => true,
+            "data" => new RecommendationCollection($projects)
+        ], 200));
+    }
+    public function heroSlider(Request $request) :void {
+        $limit = $request->input('limit', 20);
+        $clearCache = $request->input('clear-cache', false);
+
+        $projects = $this->mangaService->heroSliders($limit, $clearCache);
+        throw new HttpResponseException(response([
+            "success" => true,
+            "data" => new HeroSliderCollection($projects)
+        ], 200));
+    }
+    public function readingPage(Request $request) :void {
+        $slug = $request->input('slug-chapter');
+        $clearCache = $request->input('clear-cache', false);
+
+        $projects = $this->mangaService->readingPage($slug, $clearCache);
+        throw new HttpResponseException(response([
+            "success" => true,
+            "data" => $projects
+        ], 200));
+    }
+    public function seriesDetail(string $slugSeries, Request $request) :void {
+        $clearCache = $request->input('clear-cache', false);
+
+        $projects = $this->mangaService->seriesDetail($slugSeries, $clearCache);
+        throw new HttpResponseException(response([
+            "success" => true,
+            "data" => new SeriesDetailResource($projects)
         ], 200));
     }
 }

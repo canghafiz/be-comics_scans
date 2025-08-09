@@ -23,8 +23,14 @@ Route::middleware('api_key')->group(function(){
     });
 
     Route::prefix('v1/manga')->group(function(){
+        Route::get("/popularToday", [MangaController::class, 'popularToday']);
         Route::get("/latest", [MangaController::class, 'latest']);
         Route::get("/projectAll", [MangaController::class, 'projectAll']);
+        Route::get("/search", [MangaController::class, 'searchManga']);
+        Route::get("/recommendation", [MangaController::class, 'recommendation']);
+        Route::get("/heroSlider", [MangaController::class, 'heroSlider']);
+        Route::get("/readingPage", [MangaController::class, 'readingPage']);
+        Route::get("/seriesDetail/{slugSeries}", [MangaController::class, 'seriesDetail']);
     });
 });
 

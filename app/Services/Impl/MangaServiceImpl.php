@@ -13,6 +13,26 @@ use Illuminate\Support\Facades\Redis;
 
 class MangaServiceImpl implements MangaService
 {
+    public function popularToday(bool $clearCache): array
+    {
+        $limit = 10;
+        $cacheKey = "popular:today:limit:{$limit}";
+
+        if ($clearCache) {
+            $this->forgetCacheValue($cacheKey);
+            $this->clearCoverCaches();
+
+            $freshData = $this->fetchPopularToday($limit, $clearCache);
+            $this->setCacheValue($cacheKey, $freshData);
+
+            return $freshData;
+        }
+
+        return $this->getCacheValue($cacheKey, function () use ($limit) {
+            return $this->fetchPopularToday($limit, false);
+        });
+    }
+
     public function latest(int $limit = 20, bool $clearCache = false): array
     {
         $cacheKey = "latest:manga:limit:{$limit}";
@@ -51,7 +71,112 @@ class MangaServiceImpl implements MangaService
         });
     }
 
+    public function search(?string $title, ?array $genres, bool $clearCache = false): array
+    {
+        if (is_array($genres) && !empty($genres)) {
+            sort($genres);
+            $genresString = implode(',', $genres);
+        } else {
+            $genresString = 'all';
+        }
+
+        $cacheKey = "search:title:" . ($title ?? 'all') . ":genres:" . $genresString;
+
+        if ($clearCache) {
+            $this->forgetCacheValue($cacheKey);
+            $this->clearCoverCaches();
+
+            $freshData = $this->fetchSearch($title, $genres);
+            $this->setCacheValue($cacheKey, $freshData);
+
+            return $freshData;
+        }
+
+        return $this->getCacheValue($cacheKey, function () use ($title, $genres) {
+            return $this->fetchSearch($title, $genres);
+        });
+    }
+
+    public function recommendation(int $limit): array
+    {
+        return $this->fetchRecommendation($limit);
+    }
+
+    public function heroSliders(int $limit = 5, bool $clearCache = false): array
+    {
+        $cacheKey = "hero:sliders:limit:{$limit}";
+
+        if ($clearCache) {
+            $this->forgetCacheValue($cacheKey);
+            $this->clearCoverCaches();
+
+            $freshData = $this->fetchHeroSliders($limit, $clearCache);
+            $this->setCacheValue($cacheKey, $freshData);
+
+            return $freshData;
+        }
+
+        return $this->getCacheValue($cacheKey, function () use ($limit) {
+            return $this->fetchHeroSliders($limit, false);
+        });
+    }
+
+    public function readingPage(string $slugChapter, bool $clearCache): array
+    {
+        $cacheKey = "reading:page:$slugChapter";
+
+        if ($clearCache) {
+            $this->forgetCacheValue($cacheKey);
+            $this->clearCoverCaches();
+
+            $freshData = $this->fetchReadingPage($slugChapter);
+            $this->setCacheValue($cacheKey, $freshData);
+
+            return $freshData;
+        }
+
+        return $this->getCacheValue($cacheKey, function () use ($slugChapter) {
+            return $this->fetchReadingPage($slugChapter);
+        });
+    }
+    public function seriesDetail(string $slugSeries, bool $clearCache): array
+    {
+        $cacheKey = "slug:series:$slugSeries";
+
+        if ($clearCache) {
+            $this->forgetCacheValue($cacheKey);
+            $this->clearCoverCaches();
+
+            $freshData = $this->fetchSeriesDetail($slugSeries, true);
+            $this->setCacheValue($cacheKey, $freshData);
+
+            return $freshData;
+        }
+
+        return $this->getCacheValue($cacheKey, function () use ($slugSeries) {
+            return $this->fetchSeriesDetail($slugSeries, false);
+        });
+    }
+
     // Helper Function
+    private function fetchPopularToday(int $limit, bool $clearChildCache): array
+    {
+        $posts = WpPosts::where('post_type', 'manga')
+            ->with('meta')
+            ->join('wp_postmeta', 'wp_posts.ID', '=', 'wp_postmeta.post_id')
+            ->where('wp_postmeta.meta_key', 'wpb_post_views_count')
+            ->orderBy('wp_postmeta.meta_value', 'desc')
+            ->limit($limit)
+            ->get();
+
+        return $posts->map(function ($post) use ($clearChildCache) {
+            $coverUrl = $this->getCover($post->ID, $clearChildCache);
+            $post['cover'] = $coverUrl;
+            $post['chapters'] = $this->getChaptersBySlug($post->post_name, $clearChildCache);
+            return $post;
+        })->toArray();
+    }
+
     private function fetchLatestManga(int $limit, bool $clearChildCache): array
     {
         $posts = WpPosts::where('post_type', 'manga')
@@ -91,6 +216,125 @@ class MangaServiceImpl implements MangaService
             return $post;
         })->toArray();
     }
+
+    private function fetchSearch(?string $title, ?array $genres): array
+    {
+        $query = WpPosts::where('post_type', 'manga')
+            ->with('meta');
+
+        if ($title) {
+            $query->where('post_title', 'like', '%' . $title . '%');
+        }
+
+        if (!empty($genres)) {
+            $query->whereHas('genres', function ($q) use ($genres) {
+                $q->whereIn('name', $genres);
+            });
+        }
+
+        $posts = $query->get();
+
+        return $posts->map(function ($post) {
+            $coverUrl = $this->getCover($post->ID, false);
+            $post['cover'] = $coverUrl;
+            $post['chapters'] = $this->getChaptersBySlug($post->post_name, false);
+            return $post;
+        })->toArray();
+    }
+
+    private function fetchRecommendation(int $limit): array
+    {
+        $posts = WpPosts::where('post_type', 'manga')
+            ->with('meta')
+            ->inRandomOrder()
+            ->limit($limit)
+            ->get();
+
+        return $posts->map(function ($post) {
+            $coverUrl = $this->getCover($post->ID, false);
+            $post['cover'] = $coverUrl;
+            $post['chapters'] = $this->getChaptersBySlug($post->post_name, false);
+            return $post;
+        })->toArray();
+    }
+
+    private function fetchHeroSliders(int $limit): array
+    {
+        $topCount = 10;
+
+        $posts = WpPosts::where('post_type', 'manga')
+            ->with('meta')
+            ->join('wp_postmeta', 'wp_posts.ID', '=', 'wp_postmeta.post_id')
+            ->where('wp_postmeta.meta_key', 'ts_monthly_view_count')
+            ->orderByRaw('CAST(wp_postmeta.meta_value AS UNSIGNED) DESC')
+            ->limit($topCount)
+            ->get();
+
+        $posts = $posts->shuffle()->take($limit);
+
+        return $posts->map(function ($post) {
+            $coverUrl = $this->getCover($post->ID, false);
+            $post['cover'] = $coverUrl;
+            $post['chapters'] = $this->getChaptersBySlug($post->post_name, false);
+            return $post;
+        })->toArray();
+    }
+
+    private function fetchReadingPage(string $slug): ?array
+    {
+        $post = WpPosts::where('post_name', $slug)
+            ->with('meta')
+            ->first();
+
+        if (!$post) {
+            return null;
+        }
+
+        $chapterMeta = $post->meta->firstWhere('meta_key', 'ero_chapter');
+
+        $termRelationship = WpTermRelationships::where('object_id', $post->ID)
+            ->with('termTaxonomy.term')
+            ->first();
+
+        $slugSeries = null;
+        if ($termRelationship && $termRelationship->termTaxonomy && $termRelationship->termTaxonomy->term) {
+            $slugSeries = $termRelationship->termTaxonomy->term->slug;
+        }
+
+        $otherChapters = $slugSeries ? $this->fetchChaptersBySlugData($slugSeries) : [];
+
+        return [
+            'chapters' => $post->post_content,
+            'chapterNum' => $chapterMeta ? $chapterMeta->meta_value : null,
+            'slugSeries' => $slugSeries,
+            'otherChapters' => $otherChapters,
+        ];
+    }
+    private function fetchSeriesDetail(string $slugSeries, bool $clearCache): array
+    {
+        $post = WpPosts::where('post_name', $slugSeries)
+            ->with('meta')
+            ->with('genres')
+            ->first();
+
+        if (!$post) {
+            return [];
+        }
+
+        $coverUrl = $this->getCover($post->ID, $clearCache);
+        $chapters = $this->getChaptersBySlug($post->post_name, $clearCache);
+
+        return [
+            'ID' => $post->ID,
+            'post_title' => $post->post_title,
+            'post_name' => $post->post_name,
+            'cover' => $coverUrl,
+            'genres' => $post->genres->pluck('name')->implode(', '),
+            'chapters' => $chapters,
+            'meta' => $post->meta->toArray(),
+        ];
+    }
+
     private function getChaptersBySlug(string $slug, bool $clearCache): array
     {
         $cacheKey = "chapters:slug:{$slug}";
@@ -122,25 +366,24 @@ class MangaServiceImpl implements MangaService
         })->orderBy('object_id', 'desc')->get();
 
         return $termRelationships->map(function ($relationship, $index) use ($termRelationships) {
-            $chapterData = $this->getSingleChapterById($relationship->object_id);
-
-            if ($chapterData) {
-                $chapterData['chapterNum'] = count($termRelationships) - $index;
-                return $chapterData;
-            }
-
-            return null;
+            return $this->getSingleChapterById($relationship->object_id);
         })->filter()->values()->toArray();
     }
 
     private function getSingleChapterById(int $id): ?array
     {
-        $post = WpPosts::where('id', $id)->first();
+        $post = WpPosts::where('id', $id)
+            ->with('meta')
+            ->first();
 
         if ($post) {
+            $chapterMeta = $post->meta->firstWhere('meta_key', 'ero_chapter');
+
             return [
                 'chapters' => $post->post_content,
+                'chapterNum' => $chapterMeta ? $chapterMeta->meta_value : null,
                 'time' => $post->post_date,
+                'slug' => $post->post_name,
             ];
         }
 
