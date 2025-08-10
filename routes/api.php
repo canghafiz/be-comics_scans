@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\CacheController;
 use App\Http\Controllers\MangaController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
@@ -29,8 +30,12 @@ Route::middleware('api_key')->group(function(){
         Route::get("/search", [MangaController::class, 'searchManga']);
         Route::get("/recommendation", [MangaController::class, 'recommendation']);
         Route::get("/heroSlider", [MangaController::class, 'heroSlider']);
-        Route::get("/readingPage", [MangaController::class, 'readingPage']);
+        Route::get("/readingPage/{slugChapter}", [MangaController::class, 'readingPage']);
         Route::get("/seriesDetail/{slugSeries}", [MangaController::class, 'seriesDetail']);
+    });
+
+    Route::prefix('v1/cache')->group(function(){
+        Route::delete("/clearAll", [CacheController::class, 'clearAllCache']);
     });
 });
 

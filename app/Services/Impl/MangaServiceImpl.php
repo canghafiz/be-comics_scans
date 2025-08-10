@@ -2,6 +2,7 @@
 
 namespace App\Services\Impl;
 
+use App\Models\WpPostMeta;
 use App\Models\WpPosts;
 use App\Models\WpTermRelationships;
 use App\Models\WpTerms;
@@ -110,14 +111,14 @@ class MangaServiceImpl implements MangaService
             $this->forgetCacheValue($cacheKey);
             $this->clearCoverCaches();
 
-            $freshData = $this->fetchHeroSliders($limit, $clearCache);
-            $this->setCacheValue($cacheKey, $freshData);
+            $freshData = $this->fetchHeroSliders($limit);
+            $this->setCacheValue($cacheKey, $freshData, 604800);
 
             return $freshData;
         }
 
         return $this->getCacheValue($cacheKey, function () use ($limit) {
-            return $this->fetchHeroSliders($limit, false);
+            return $this->fetchHeroSliders($limit);
         });
     }
 
@@ -307,9 +308,11 @@ class MangaServiceImpl implements MangaService
             'chapters' => $post->post_content,
             'chapterNum' => $chapterMeta ? $chapterMeta->meta_value : null,
             'slugSeries' => $slugSeries,
+            'time' => $post->post_date,
             'otherChapters' => $otherChapters,
         ];
     }
+
     private function fetchSeriesDetail(string $slugSeries, bool $clearCache): array
     {
         $post = WpPosts::where('post_name', $slugSeries)
@@ -369,25 +372,29 @@ class MangaServiceImpl implements MangaService
             return $this->getSingleChapterById($relationship->object_id);
         })->filter()->values()->toArray();
     }
-
-    private function getSingleChapterById(int $id): ?array
+    private function getSingleChapterById(int $id, bool $showChapter = false): ?array
     {
         $post = WpPosts::where('id', $id)
             ->with('meta')
             ->first();
 
-        if ($post) {
-            $chapterMeta = $post->meta->firstWhere('meta_key', 'ero_chapter');
-
-            return [
-                'chapters' => $post->post_content,
-                'chapterNum' => $chapterMeta ? $chapterMeta->meta_value : null,
-                'time' => $post->post_date,
-                'slug' => $post->post_name,
-            ];
+        if (!$post) {
+            return null;
         }
 
-        return null;
+        $chapterMeta = $post->meta->firstWhere('meta_key', 'ero_chapter');
+
+        $result = [
+            'chapterNum' => $chapterMeta ? $chapterMeta->meta_value : null,
+            'time' => $post->post_date,
+            'slug' => $post->post_name,
+        ];
+
+        if ($showChapter) {
+            $result['chapters'] = $post->post_content;
+        }
+
+        return $result;
     }
 
     private function getCover(int $idPostParent, bool $clearCache): ?string
@@ -413,9 +420,16 @@ class MangaServiceImpl implements MangaService
         $post = WpPosts::where('post_parent', $idPostParent)
             ->first();
 
-        return $post ? $post->guid : null;
-    }
+        if ($post) {
+            return $post->guid;
+        }
 
+        $meta = WpPostMeta::where('post_id', $idPostParent)
+            ->where('meta_key', 'ero_image')
+            ->first();
+
+        return $meta ? $meta->meta_value : null;
+    }
     private function isRedisAvailable(): bool
     {
         try {
@@ -441,14 +455,14 @@ class MangaServiceImpl implements MangaService
         }
     }
 
-    private function setCacheValue(string $key, $value): void
+    private function setCacheValue(string $key, $value, int $duration = 3600): void
     {
         if (!$this->isRedisAvailable()) {
             return;
         }
 
         try {
-            Cache::store('redis')->put($key, $value, 3600); // 1 hour = 3600 seconds
+            Cache::store('redis')->put($key, $value, $duration);
         } catch (Exception $e) {
             Log::warning("Failed to set cache for key {$key}: " . $e->getMessage());
         }

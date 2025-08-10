@@ -88,11 +88,10 @@ class MangaController extends Controller
             "data" => new HeroSliderCollection($projects)
         ], 200));
     }
-    public function readingPage(Request $request) :void {
-        $slug = $request->input('slug-chapter');
+    public function readingPage(string $slugChapter, Request $request) :void {
         $clearCache = $request->input('clear-cache', false);
 
-        $projects = $this->mangaService->readingPage($slug, $clearCache);
+        $projects = $this->mangaService->readingPage($slugChapter, $clearCache);
         throw new HttpResponseException(response([
             "success" => true,
             "data" => $projects
